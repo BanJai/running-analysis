@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-Hant-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>半馬課表</title>
+<meta name="description" content="12 週半馬拉松訓練課表，27/12 比賽。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+HK:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="../app/style.css">
+</head>
+<body>
+<div class="wrap">
+  <nav class="site-nav" aria-label="分頁">
+    <a href="../">跑姿對比</a>
+    <a href="./" aria-current="page">半馬課表</a>
+  </nav>
+
+  <header class="hero">
+    <h1>半馬課表（12 週）</h1>
+    <p class="sub">每週跑四次：星期二 Easy、星期四配速課，週末一日 Easy、一日長課。27/12 比賽 21.1K，目標配速 7:06／km。</p>
+  </header>
+
+  <section class="block" aria-label="課表">
+    <div class="tblwrap plan" id="plan"></div>
+    <p class="note" id="plansum"></p>
+  </section>
+
+  <footer class="foot">
+    <p><a href="../">返去跑姿對比分析</a></p>
+  </footer>
+</div>
+<script type="module" src="../app/plan.js"></script>
+</body>
+</html>

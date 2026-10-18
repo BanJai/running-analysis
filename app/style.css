@@ -108,3 +108,33 @@ input[type=number]{width:5.5em}
 .again{display:flex;justify-content:center}
 .foot{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:14px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
+/* site nav: 跑姿對比 / 半馬課表 */
+.site-nav{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:8px}
+.site-nav a{color:var(--ink);text-decoration:none;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 14px}
+.site-nav a:hover{border-color:var(--muted)}
+.site-nav a[aria-current="page"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+/* half marathon plan */
+.plan table{min-width:0}
+.plan tbody th{font-size:14px;color:var(--ink);letter-spacing:0;white-space:nowrap}
+.plan tbody th small{display:block;color:var(--muted);font-size:12px;font-weight:400}
+.plan .tag{display:inline-block;margin-left:6px;font-size:11px;font-weight:700;padding:0 8px;border-radius:999px;background:var(--me);color:#fff;vertical-align:1px}
+.plan tr.down td,.plan tr.down th{background:var(--chip)}
+.plan tr.race td,.plan tr.race th{background:color-mix(in srgb,var(--std) 14%,var(--panel))}
+.plan tr.race td:nth-child(5){font-weight:700;color:var(--std)}
+.plan tr.now th{box-shadow:inset 3px 0 0 var(--me)}
+@media (max-width:640px){
+  .plan table,.plan tbody,.plan tr,.plan th,.plan td{display:block}
+  .plan thead{display:none}
+  .plan tr{border-bottom:1px solid var(--line);padding:10px 14px}
+  .plan tr:last-child{border-bottom:none}
+  .plan tbody th{display:flex;align-items:baseline;gap:8px;padding:0 0 6px;border:none}
+  .plan tbody th small{display:inline}
+  .plan tbody th .tag{margin-left:0}
+  .plan td{display:grid;grid-template-columns:7.5em minmax(0,1fr);gap:8px;padding:3px 0;border:none}
+  .plan td::before{content:attr(data-l);color:var(--muted);font-size:12px;font-family:var(--f-body)}
+  .plan tr.down{background:var(--chip)}
+  .plan tr.race{background:color-mix(in srgb,var(--std) 14%,var(--panel))}
+  .plan tr.down td,.plan tr.down th,.plan tr.race td,.plan tr.race th{background:none}
+  .plan tr.now{box-shadow:inset 3px 0 0 var(--me)}
+  .plan tr.now th{box-shadow:none}
+}
