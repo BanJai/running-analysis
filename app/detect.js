@@ -8,42 +8,73 @@ export const MODELS = {
   full: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
 };
 
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('model')), ms))]);
+
 let fileset = null;
 const cache = {};
 async function landmarker(model) {
-  fileset ||= await FilesetResolver.forVisionTasks(WASM);
+  fileset ||= await withTimeout(FilesetResolver.forVisionTasks(WASM), 60000);
   if (cache[model]) return cache[model];
   const opts = delegate => ({
     baseOptions: { modelAssetPath: MODELS[model], delegate },
     runningMode: 'VIDEO', numPoses: 1,
     minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5, minTrackingConfidence: 0.5,
   });
-  try { cache[model] = await PoseLandmarker.createFromOptions(fileset, opts('GPU')); }
-  catch (e) { cache[model] = await PoseLandmarker.createFromOptions(fileset, opts('CPU')); }
+  // GPU (WebGL) first; some phones fail or never finish creating it, so fall back to CPU
+  try { cache[model] = await withTimeout(PoseLandmarker.createFromOptions(fileset, opts("GPU")), 180000); }
+  catch (e) { cache[model] = await withTimeout(PoseLandmarker.createFromOptions(fileset, opts("CPU")), 180000); }
   return cache[model];
 }
 
-const once = (el, ev) => new Promise((res, rej) => {
-  const ok = () => { el.removeEventListener('error', bad); res(); };
-  const bad = () => { el.removeEventListener(ev, ok); rej(new Error('video')); };
+// Resolve on `ev`, reject on a media error or after `ms` (iOS Safari can stay silent forever
+// instead of firing an error, so every wait has a limit).
+const once = (el, ev, ms = 15000) => new Promise((res, rej) => {
+  let timer;
+  const done = fn => arg => { clearTimeout(timer); el.removeEventListener(ev, ok); el.removeEventListener('error', bad); fn(arg); };
+  const ok = done(res), bad = done(() => rej(new Error('video')));
   el.addEventListener(ev, ok, { once: true }); el.addEventListener('error', bad, { once: true });
+  timer = setTimeout(done(() => rej(new Error('timeout'))), ms);
 });
+
+// Seek and wait for the frame; seeking to the current time fires no 'seeked' in Safari.
+export async function seekTo(v, t, ms = 8000) {
+  if (Math.abs(v.currentTime - t) < 1e-4 && !v.seeking) return;
+  const p = once(v, 'seeked', ms);
+  v.currentTime = t;
+  await p;
+}
 
 export async function loadVideo(src) {
   const v = document.createElement('video');
-  v.muted = true; v.playsInline = true; v.preload = 'auto'; v.crossOrigin = 'anonymous';
-  v.src = src;
-  await once(v, 'loadedmetadata');
+  v.muted = true; v.defaultMuted = true; v.playsInline = true; v.preload = 'auto';
+  v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', '');
+  // iOS Safari only decodes media for elements in the document; keep it on screen but invisible
+  v.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none;z-index:-1';
+  document.body.appendChild(v);
+  const meta = once(v, 'loadedmetadata', 20000);
+  v.src = src; v.load();
+  await meta;
   if (!v.videoWidth) throw new Error('video');
-  if (v.readyState < 2) await once(v, 'loadeddata');
+  if (v.readyState < 2) {
+    // iOS ignores preload until playback starts; a muted play()/pause() makes it decode the first frame
+    const data = once(v, 'loadeddata', 20000);
+    try { await v.play(); } catch (e) {}
+    await data;
+    v.pause();
+  }
   return v;
+}
+
+export function disposeVideo(v) {
+  if (!v) return;
+  v.pause(); v.removeAttribute('src'); v.load(); v.remove();
 }
 
 // Source frame rate from presented-frame timestamps while playing a short stretch.
 export async function estimateFps(v) {
   if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return null;
   const ts = [];
-  v.currentTime = 0; await once(v, 'seeked');
+  await seekTo(v, 0);
   await new Promise(res => {
     let done = false;
     const stop = () => { if (done) return; done = true; v.pause(); res(); };
@@ -75,8 +106,8 @@ export async function detectPoses(v, { fs, t0 = 0, t1 = v.duration, model = 'hea
   const base = (lm._lastTs || 0) + 1000;
   for (let i = 0; i < N; i++) {
     if (signal?.aborted) throw new Error('abort');
-    v.currentTime = t0 + i / fs + 0.002;
-    await once(v, 'seeked');
+    try { await seekTo(v, t0 + i / fs + 0.002); }
+    catch (e) { if (e.message === 'timeout' && i > 0) { img.push(null); world.push(null); continue; } throw e; }
     const ts = base + Math.round(i * 1000 / fs);
     ctx.drawImage(v, 0, 0, cv.width, cv.height);
     const r = lm.detectForVideo(cv, ts);

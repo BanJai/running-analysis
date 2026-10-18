@@ -1,6 +1,6 @@
 // Page logic: upload -> in-browser pose detection -> analysis -> side-by-side loop with the
 // standard clip, skeleton overlays and the four comparison tabs.
-import { loadVideo, estimateFps, detectPoses } from './detect.js';
+import { loadVideo, disposeVideo, estimateFps, detectPoses } from './detect.js';
 import { prepare, pickWindow, analyze, toImage } from './analysis.js';
 import { buildTabs, LV } from './verdicts.js';
 
@@ -38,11 +38,18 @@ async function run(file) {
   $('prog').hidden = false; drop.style.pointerEvents = 'none'; progress(0, '載入影片…');
   if (objUrl) URL.revokeObjectURL(objUrl);
   objUrl = URL.createObjectURL(file);
+  // the cancel button must work at every step, including ones that wait on the browser
+  const signal = busy.signal;
+  const guard = p => Promise.race([p, new Promise((_, rej) => signal.addEventListener('abort', () => rej(new Error('abort')), { once: true }))]);
+  let v = null;
   try {
-    const S = await stdReady;
-    let v;
-    try { v = await loadVideo(objUrl); }
-    catch (e) { throw new Error('呢個瀏覽器播唔到呢條片（例如部分 Windows 電腦唔支援 iPhone 嘅 HEVC 格式）。試吓用 Safari 或手機打開，或者先轉做 H.264 MP4。'); }
+    const S = await guard(stdReady);
+    try { v = await guard(loadVideo(objUrl)); }
+    catch (e) {
+      if (e.message === 'abort') throw e;
+      if (e.message === 'timeout') throw new Error(`部機讀唔到呢條片（等咗 20 秒都未載入，檔案 ${(file.size / 1e6).toFixed(0)} MB）。iPhone 上可以喺「相片」先剪短條片（淨係留跑步嗰 5–15 秒）再試，或者用 Safari 打開網站。`);
+      throw new Error('呢個瀏覽器播唔到呢條片（例如部分 Windows 電腦唔支援 iPhone 嘅 HEVC 格式）。試吓用 Safari 或手機打開，或者先轉做 H.264 MP4。');
+    }
     const dur = v.duration;
     let t0 = Math.max(0, +$('t0').value || 0), t1 = Math.min(dur, +$('t1').value || dur);
     if (t1 - t0 > MAX_SPAN) t1 = t0 + MAX_SPAN;
@@ -51,19 +58,27 @@ async function run(file) {
       throw new Error(`分析範圍太短（${(t1 - t0).toFixed(1)} 秒），請揀最少 3 秒。條片長 ${dur.toFixed(1)} 秒。`);
     }
     progress(0, '估計幀率…');
-    const src = await estimateFps(v);
+    const src = await guard(estimateFps(v).catch(() => null));
     const fs = src && src >= 50 ? 60 : src && src >= 20 ? Math.round(src) : 30;
     progress(0, '載入骨架模型（第一次會耐少少）…');
     const N = Math.floor((t1 - t0) * fs);
     const startT = performance.now();
-    const raw = await detectPoses(v, {
-      fs, t0, t1, model: $('model').value, signal: busy.signal,
+    let raw;
+    try {
+      raw = await guard(detectPoses(v, {
+      fs, t0, t1, model: $('model').value, signal,
       onProgress: p => {
         const done = Math.round(p * N), el = (performance.now() - startT) / 1000;
         const left = p > 0.03 ? Math.round(el / p * (1 - p)) : null;
         progress(p, `逐格搵關節：${done} / ${N} 格` + (left != null ? `，大約仲要 ${left} 秒` : ''));
       },
-    });
+      }));
+    } catch (e) {
+      if (e.message === 'model') throw new Error('骨架模型載入唔到（可能網絡太慢或者部機唔支援）。試吓將「精準度」改做「較快」再試。');
+      if (e.message === 'timeout') throw new Error('部機讀取影片畫面時停咗冇反應。試吓先剪短條片再試。');
+      throw e;
+    }
+    disposeVideo(v); v = null;
     progress(1, '分析步態…');
     let prep;
     try { prep = prepare(raw, $('dir').value); }
@@ -78,11 +93,12 @@ async function run(file) {
       pts: toImage(prep, U.pts), names: prep.mirrored ? { R: '左', L: '右' } : { R: '右', L: '左' },
       t0: raw.t0 + win.start / fs + 0.002,
     };
-    show(user, S, v);
+    show(user, S);
   } catch (e) {
     if (e.message === 'abort') showErr('已取消。');
     else { console.error(e); showErr(e.message && !/^[a-z]+$/.test(e.message) ? e.message : '分析出錯，請換條片再試。'); }
   } finally {
+    disposeVideo(v);
     busy = null; $('prog').hidden = true; drop.style.pointerEvents = '';
   }
 }
@@ -91,7 +107,7 @@ async function run(file) {
 let loop = null;
 function stopLoop() { if (loop) cancelAnimationFrame(loop); loop = null; $('vu').pause(); $('vs').pause(); }
 
-function show(user, S, probe) {
+function show(user, S) {
   const U = user.an, Su = U.summary, Ss = S.an.summary;
   $('upload').hidden = true; $('results').hidden = false;
   const vu = $('vu'), vs = $('vs');
