@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Extract standard landmarks</title>
+<!-- Re-creates app/std/std_pose.json from app/std/standard.mp4 with the same detector the site uses.
+     Open via a local web server, wait for "done", then save the JSON that downloads. -->
+<pre id="log">loading…</pre>
+<script type="module">
+import { loadVideo, detectPoses } from '../app/detect.js';
+const log = document.getElementById('log');
+const v = await loadVideo(new URLSearchParams(location.search).get('src') || '../app/std/standard.mp4');
+const raw = await detectPoses(v, { fs: 30, t0: 0, t1: v.duration, model: 'heavy', onProgress: p => log.textContent = (p * 100).toFixed(0) + '%' });
+raw.fps = 30;
+const json = JSON.stringify(raw);
+window.__out = json;
+log.textContent = 'done ' + raw.img.length + ' frames, detected ' + raw.img.filter(Boolean).length;
+if (!navigator.webdriver) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  a.download = 'std_pose.json'; a.click();
+}
+</script>
