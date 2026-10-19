@@ -19,26 +19,40 @@ const WEEKS = [
   ['W12 比賽週', [['4K Easy', 4], ['3K Easy + 3×100m 加速', 3.3], ['休息', 0], ['27/12 比賽 21.1K', 21.1]], 'race'],
 ];
 
-const DAY = 864e5;
-// Monday of week 1: race week (W12) starts on the Monday before race day.
-const start = new Date(RACE.getTime() - 6 * DAY - 11 * 7 * DAY);
+// W1 starts Monday 28/9 (Chun: 19/10 week is W4). W1–W11 run back to back from there;
+// W12 stays the race week (the Monday before race day), so any week in between is unplanned.
+// Dates are built from day numbers so DST changes can't shift a week boundary.
+const day = n => new Date(2026, 8, 28 + n);  // n days after W1's Monday
+const RACE_DAY = Math.round((RACE - day(0)) / 864e5);
 const fmt = d => `${d.getDate()}/${d.getMonth() + 1}`;
 const km = n => (Number.isInteger(n) ? n : n.toFixed(1)) + ' km';
 
 const now = new Date();
 const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-const cur = Math.floor((today - start) / (7 * DAY));
+const isNow = n => today >= day(n) && today < day(n + 7);
+const range = n => `${fmt(day(n))}–${fmt(day(n + 6))}`;
 
-const rows = WEEKS.map(([wk, cells, kind], i) => {
-  const a = new Date(start.getTime() + i * 7 * DAY), b = new Date(a.getTime() + 6 * DAY);
+const row = ([wk, cells, kind], n) => {
   const total = cells.reduce((s, c) => s + c[1], 0);
-  const cls = [kind, i === cur ? 'now' : ''].filter(Boolean).join(' ');
+  const cls = [kind, isNow(n) ? 'now' : ''].filter(Boolean).join(' ');
   return `<tr${cls ? ` class="${cls}"` : ''}>
-    <th scope="row"><b>${wk}</b>${i === cur ? '<span class="tag">本週</span>' : ''}<small class="num">${fmt(a)}–${fmt(b)}</small></th>
+    <th scope="row"><b>${wk}</b>${isNow(n) ? '<span class="tag">本週</span>' : ''}<small class="num">${range(n)}</small></th>
     ${cells.map((c, j) => `<td data-l="${COLS[j]}">${c[0]}</td>`).join('')}
     <td data-l="總跑量" class="v">${km(total)}</td>
   </tr>`;
-}).join('');
+};
+const gap = n => `<tr class="gap${isNow(n) ? ' now' : ''}">
+    <th scope="row"><b>—</b>${isNow(n) ? '<span class="tag">本週</span>' : ''}<small class="num">${range(n)}</small></th>
+    <td colspan="5">課表冇排呢一週</td>
+  </tr>`;
+
+let rows = '';
+WEEKS.forEach((w, i) => {
+  if (i === WEEKS.length - 1) {
+    for (let n = i * 7; n < RACE_DAY - 6; n += 7) rows += gap(n);
+    rows += row(w, RACE_DAY - 6);
+  } else rows += row(w, i * 7);
+});
 
 const all = WEEKS.reduce((s, w) => s + w[1].reduce((t, c) => t + c[1], 0), 0);
 

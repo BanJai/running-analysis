@@ -138,3 +138,5 @@ input[type=number]{width:5.5em}
   .plan tr.now{box-shadow:inset 3px 0 0 var(--me)}
   .plan tr.now th{box-shadow:none}
 }
+.plan tr.gap td{color:var(--muted);font-style:italic}
+@media (max-width:640px){.plan tr.gap td{display:block}}
